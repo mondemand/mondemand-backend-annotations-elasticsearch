@@ -22,7 +22,8 @@
 -export ([ init/1 ]).
 
 -define (POOL, md_ann_es_pool).
--define (MILLISECOND_CHECK, 1000000000).
+-define (MILLISECOND_CHECK, 10000000000).
+-define (MILLISECOND_CORRECTION, 1000000000).
 -define (MEGASECOND_ADJUST, 1000000).
 -define (MILLISECOND_ADJUST, 1000).
 -record (state, { annotation_labels, create_url, update_url, timeout }).
@@ -87,8 +88,8 @@ connect (State) ->
   {ok, State}.
 
 send (State = #state {annotation_labels = AnnotationLabels, create_url = Create_Url,
-                      update_url = Update_Url, timeout = Timeout}, Data) ->
-  Annotation = get_annotation(Data, AnnotationLabels),
+                      update_url = Update_Url, timeout = Timeout}, Event) ->
+  Annotation = get_annotation(Event),
   Url = select_url(Annotation, Create_Url, Update_Url),
   case catch lhttpc:request
          (Url, "POST",[], format_annotation(Annotation, AnnotationLabels), Timeout, [{max_connections, 256}])
@@ -106,16 +107,15 @@ destroy (_) ->
 %%======================
 %% Internal functions
 %%======================
-get_annotation ( { _Type, _RecTime, _SenderIp, _SenderPort, _Name, MSG }, Labels ) ->
-  { _MsgName, ID, Timestamp, Description, Title, TagCount, Tags, ContextCount, Context } = MSG,
-  TagStr =
-    case Tags of
-      [] -> <<>>;
-      T when is_list (T), T =/= [] ->
-        iolist_to_binary((mondemand_server_util:join (T,",")))
-    end,
-  [ { timestamp, Timestamp }, { description, Description }, { title, Title },
-    { tags, TagStr }, { id, ID } ].
+get_annotation (Event) ->
+  AnnotationMsg = mondemand_event:msg (Event),
+  [ {timestamp, mondemand_annotationmsg:timestamp(AnnotationMsg) },
+    {description, mondemand_annotationmsg:description(AnnotationMsg) },
+    {title, mondemand_annotationmsg:text(AnnotationMsg)},
+    {tags,
+      iolist_to_binary (mondemand_server_util:join([ T || T <- mondemand_annotationmsg:tags(AnnotationMsg), T =/= []],
+                                                   ",")) },
+    {id, mondemand_annotationmsg:id(AnnotationMsg)} ].
 
 select_url ( AnnotationList, Create_Url, Update_Url) ->
   case proplists:get_value(id, AnnotationList) of
@@ -147,14 +147,14 @@ format_annotation ( Annotation, Labels ) ->
 to_iso8601 ( MilliTime ) ->
   AdjustedMilliTime =
     case MilliTime of
-      MilliTime when MilliTime =< ?MILLISECOND_CHECK*10 -> %Excluding milliseconds
+      MilliTime when MilliTime =< ?MILLISECOND_CHECK -> %Excluding milliseconds
         MilliTime * ?MILLISECOND_ADJUST;
-      MilliTime when MilliTime >= ?MILLISECOND_CHECK*10 -> %Already has milliseconds
+      MilliTime when MilliTime >= ?MILLISECOND_CHECK -> %Already has milliseconds
         MilliTime
     end,
   {{Year, Month, Day}, {Hour, Minute, Second}}
-    = calendar:now_to_datetime({AdjustedMilliTime div ?MILLISECOND_CHECK,
-                                (AdjustedMilliTime rem ?MILLISECOND_CHECK) div ?MILLISECOND_ADJUST,
+    = calendar:now_to_datetime({AdjustedMilliTime div ?MILLISECOND_CORRECTION,
+                                (AdjustedMilliTime rem ?MILLISECOND_CORRECTION) div ?MILLISECOND_ADJUST,
                                 AdjustedMilliTime rem ?MILLISECOND_ADJUST}),
   Milliseconds = AdjustedMilliTime rem ?MILLISECOND_ADJUST,
   list_to_binary(io_lib:format("~4..0w-~2..0w-~2..0wT~2..0w:~2..0w:~2..0w.~3..0wZ",
@@ -184,16 +184,22 @@ annotation_test_ () ->
    },
    {"get annotation test",
     fun () ->
-        AnnoResp = get_annotation({garbage1, garbage2, garbage3, garbage4, garbage5,
-                                   {garbage6, 42, 1000000000, "desc", "title", 2, ["tag1", "tag2"], 0, []}}, []),
+        AnnoResp = get_annotation(mondemand_event:new({127,0,0,1}, 2000, 5, <<"MonDemand::AnnotationMsg">>,
+                                                      mondemand_annotationmsg:new(42, 1000000000,
+                                                              "desc", "title",
+                                                              ["tag1", "tag2"],
+                                                              []))),
         Expected = [{timestamp, 1000000000}, {description, "desc"},
                     {title, "title"}, {tags, <<"tag1,tag2">>}, {id, 42}],
         ?assertEqual(Expected, AnnoResp),
-        AnnoResp2 = get_annotation({garbage7, garbage8, garbage9, garbage10, garbage11,
-                                   {garbage12, 43, 1000000000, "desc", "title", 0, [], 0, []}}, []),
+        AnnoResp2 = get_annotation(mondemand_event:new({127,0,0,1}, 2000, 5, <<"MonDemand::AnnotationMsg">>,
+                                                       mondemand_annotationmsg:new(43, 1000000000,
+                                                                                   "desc", "title",
+                                                                                   [],
+                                                                                   []))),
         Expected2 = [{timestamp, 1000000000}, {description, "desc"},
-                    {title, "title"}, {tags, <<>>}, {id, 42}],
-        ?assertEqual(Expected, AnnoResp)
+                    {title, "title"}, {tags, <<>>}, {id, 43}],
+        ?assertEqual(Expected2, AnnoResp2)
     end
    },
    {"select_url_test",
@@ -211,10 +217,11 @@ annotation_test_ () ->
         AnnotationList = [{bob, "test"}, {"foo","bar"}, {timestamp, 1000000000}, {"ignore", 42}],
         LabelList = [{bob, "Robert"}, {timestamp, "TimeStamp"}],
         AnnoJSON = format_annotation(AnnotationList, LabelList),
-        Comparitor = mochijson2:encode({struct, [{"TimeStamp", <<"2001-09-09T01:46:40.000Z">>},
-                                                         {"Robert", "test"},
-                                                         {"foo", "bar"}
-                                                        ]}),
+        Comparitor = mochijson2:encode({struct, [{"doc", [{"TimeStamp", <<"2001-09-09T01:46:40.000Z">>},
+                                                          {"Robert", "test"},
+                                                          {"foo", "bar"}
+                                                         ]}]}),
+        ?assertEqual(Comparitor, AnnoJSON),
         AnnotationList2 = [{bob, "test"}, {id, "A123"}, {"foo","bar"}, {timestamp, 1000000000}, {"ignore", 42}],
         LabelList2 = [{bob, "Robert"}, {timestamp, "TimeStamp"}],
         AnnoJSON2 = format_annotation(AnnotationList2, LabelList2),
