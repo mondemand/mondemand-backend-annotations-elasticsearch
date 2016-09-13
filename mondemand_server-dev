@@ -1,0 +1,20 @@
+#!/bin/sh
+
+make all
+
+if [[ $? -ne 0 ]]; then
+    echo "didn't compile"
+    exit 1
+fi
+
+deps=
+for d in deps/* ; do
+  deps="$deps -pa $d/ebin"
+done
+exec erl \
+  -name annotations_elasticsearch -setcookie md_server \
+  $deps \
+  -pa ebin \
+  -config mondemand_server_dev.config \
+  -s reloader \
+  -s mondemand_server_app
