@@ -1,2 +1,5 @@
+* Fri Oct 06 2017 Anthony Molinaro <anthonym@alumni.caltech.edu> 0.0.1
+- bump lhttpc dep
+
 * Tue May 03 2016 Luke Powers <los.powers@gmail.com> 0.0.0
 - initial version

@@ -1,7 +1,7 @@
 { application, mondemand_backend_annotations_elasticsearch,
   [
     { description,"A plugin for the mondemand server to send annotations to elasic search."},
-    { vsn,"0.0.0"},
+    { vsn,"0.0.1"},
     { modules,[]},
     { registered,[]},
     { applications, [kernel,stdlib]},
