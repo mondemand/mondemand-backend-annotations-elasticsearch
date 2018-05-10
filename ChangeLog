@@ -1,3 +1,6 @@
+* Fri May 11 2018 Anthony Molinaro <anthonym@alumni.caltech.edu> 0.0.2
+- bump mondemand-server version
+
 * Fri Oct 06 2017 Anthony Molinaro <anthonym@alumni.caltech.edu> 0.0.1
 - bump lhttpc dep
 
