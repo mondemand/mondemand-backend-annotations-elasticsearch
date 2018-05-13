@@ -1,3 +1,6 @@
+* Fri May 18 2018 Anthony Molinaro <anthonym@alumni.caltech.edu> 0.0.3
+- make sure lhttpc is in .app.src
+
 * Fri May 11 2018 Anthony Molinaro <anthonym@alumni.caltech.edu> 0.0.2
 - bump mondemand-server version
 
