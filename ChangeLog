@@ -1,3 +1,8 @@
+* Sun Dec 16 2018 Anthony Molinaro <anthonym@alumni.caltech.edu> 0.1.0
+- update deps
+- switch to rebar3 for builds
+- build with 20.x
+
 * Fri May 18 2018 Anthony Molinaro <anthonym@alumni.caltech.edu> 0.0.3
 - make sure lhttpc is in .app.src
 
